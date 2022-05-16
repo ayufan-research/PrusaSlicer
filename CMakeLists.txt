@@ -441,8 +441,12 @@ if (NOT EXPAT_FOUND)
     set(EXPAT_LIBRARIES expat)
 endif ()
 
-if (NOT TARGET EXPAT::EXPAT AND TARGET expat::expat)
-    add_library(EXPAT::EXPAT ALIAS expat::expat)
+add_library(libexpat INTERFACE)
+
+if (TARGET EXPAT::EXPAT )
+    target_link_libraries(libexpat INTERFACE EXPAT::EXPAT)
+elseif(TARGET expat::expat)
+    target_link_libraries(libexpat INTERFACE expat::expat)
 endif ()
 
 find_package(PNG REQUIRED)
