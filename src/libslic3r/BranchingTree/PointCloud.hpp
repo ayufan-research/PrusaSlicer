@@ -193,6 +193,21 @@ public:
                 visitor(i, get_distance(pos, i));
     }
 
+    const Node * closest_bedpt(const Vec3f &pos) const {
+        size_t res = find_closest_point(m_ktree, pos, [this, &pos](size_t id) {
+            return m_searchable_indices[id] &&
+                   !is_outside_support_cone(pos, get(id).pos) &&
+                   get_type(id) == BED;
+        });
+
+        const Node *ret = nullptr;
+
+        if (get_type(res) == BED)
+            ret = &get(res);
+
+        return ret;
+    }
+
     auto start_queue()
     {
         auto ptsqueue = make_mutable_priority_queue<size_t, false>(

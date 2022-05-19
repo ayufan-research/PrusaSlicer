@@ -5,6 +5,7 @@
 #include <vector>
 
 #include <libslic3r/Point.hpp>
+#include <libslic3r/TriangleMesh.hpp>
 
 // There is an implementation of a hole-aware raycaster that was eventually
 // not used in production version. It is now hidden under following define
@@ -15,11 +16,7 @@
   #include "libslic3r/SLA/Hollowing.hpp"
 #endif
 
-struct indexed_triangle_set;
-
 namespace Slic3r {
-
-class TriangleMesh;
 
 // An index-triangle structure coupled with an AABB index to support ray
 // casting and other higher level operations.

@@ -319,6 +319,7 @@ set(SLIC3R_SOURCES
     BranchingTree/BranchingTree.hpp
     BranchingTree/PointCloud.cpp
     BranchingTree/PointCloud.hpp
+    BranchingTree/PointCloudTracer.hpp
 )
 
 add_library(libslic3r STATIC ${SLIC3R_SOURCES})
