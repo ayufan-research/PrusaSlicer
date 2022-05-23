@@ -85,6 +85,9 @@ struct PointCloudTracer {
         else if (bednode)
             dist = (n.pos - bednode->pos).squaredNorm();
 
+        if (dist < 4.)
+            dist = -1.;
+
         return dist;
     }
 

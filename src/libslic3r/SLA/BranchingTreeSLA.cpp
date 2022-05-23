@@ -6,6 +6,8 @@
 
 #include "SupportTreeUtils.hpp"
 #include "BranchingTree/PointCloud.hpp"
+#include "libslic3r/AStar.hpp"
+#include "BranchingTree/PointCloudTracer.hpp"
 
 #include "Pad.hpp"
 
@@ -234,6 +236,111 @@ void create_branching_tree(SupportTreeBuilder &builder, const SupportableMesh &s
 
     for (size_t id : vbuilder.unroutable_pinheads())
         builder.head(id).invalidate();
+
+}
+
+void create_hybrid_tree(SupportTreeBuilder &builder, const SupportableMesh &sm)
+{
+    auto coordfn = [&sm](size_t id, size_t dim) { return sm.pts[id].pos(dim); };
+    KDTreeIndirect<3, float, decltype (coordfn)> tree{coordfn, sm.pts.size()};
+
+    auto nondup_idx = non_duplicate_suppt_indices(tree, sm.pts, 0.1);
+    std::vector<std::optional<Head>> heads(nondup_idx.size());
+    execution::for_each(
+        ex_tbb, size_t(0), nondup_idx.size(),
+        [&sm, &heads, &nondup_idx](size_t i) {
+            heads[i] = calculate_pinhead_placement(ex_seq, sm, nondup_idx[i]);
+        },
+        execution::max_concurrency(ex_tbb)
+        );
+
+    std::vector<long> ground_heads, mesh_heads;
+    size_t counter = 0;
+    for (auto &h : heads)
+        if (h && h->is_valid()) {
+            h->id = counter++;
+            builder.add_head(h->id, *h);
+            auto  hit   = sla::beam_mesh_hit(ex_tbb, sm.emesh,
+                                             Beam{h->junction_point(), DOWN,
+                                               h->r_back_mm},
+                                             sm.cfg.safety_distance_mm);
+            auto &store = hit.is_hit() ? mesh_heads : ground_heads;
+            store.emplace_back(h->id);
+        }
+
+    auto &its = *sm.emesh.get_triangle_mesh();
+    ExPolygons bedpolys = {branchingtree::make_bed_poly(its)};
+
+    auto props = branchingtree::Properties{}
+                     .bed_shape(bedpolys)
+                     .ground_level(sla::ground_level(sm))
+                     .max_slope(sm.cfg.bridge_slope);
+
+
+    auto leafs = reserve_vector<branchingtree::Node>(ground_heads.size());
+    for (auto &head_id : ground_heads) {
+        auto &head = builder.head(head_id);
+        leafs.emplace_back(head.junction_point().cast<float>(), head.r_back_mm);
+    }
+
+    auto bedpts = branchingtree::sample_bed(props.bed_shape(),
+                                        props.ground_level(),
+                                        props.sampling_radius());
+
+    std::vector<branchingtree::Node> junctions;
+    {
+        branchingtree::PointCloud nodes{{}, bedpts, std::move(leafs), props};
+        BranchingTreeBuilder vbuilder{builder, sm, nodes};
+        branchingtree::build_tree(nodes, vbuilder);
+        junctions = nodes.get_junctions();
+        for (auto id : vbuilder.unroutable_pinheads()) {
+            mesh_heads.emplace_back(ground_heads[id]);
+        }
+        std::cout << "unrouted ground points: " << vbuilder.unroutable_pinheads().size() << std::endl;
+                for (size_t id : vbuilder.unroutable_pinheads())
+                    builder.head(ground_heads[id]).invalidate();
+    }
+
+    leafs.clear();
+    for (auto &head_id : mesh_heads) {
+        auto &head = builder.head(head_id);
+        leafs.emplace_back(head.junction_point().cast<float>(), head.r_back_mm);
+    }
+
+    auto meshpts = branchingtree::sample_mesh(its, props.sampling_radius());
+    {
+//        bedpts.insert(bedpts.end(), junctions.begin(), junctions.end());
+        branchingtree::PointCloud nodes{std::move(meshpts), junctions, leafs, props};
+
+        PointCloudTracer pct{nodes, sm.emesh};
+        std::vector<branchingtree::Node> out;
+        //    VanekTreeBuilder vbuilder{builder, sm, pcloud};
+
+        for (const branchingtree::Node &leaf : leafs) {
+            out.clear();
+            astar::search_route(pct, leaf, std::back_inserter(out));
+
+            if (!out.empty()) out.erase(out.begin());
+
+            const branchingtree::Node *from = &leaf;
+            for (const branchingtree::Node &n : out) {
+                //            if (pcloud.get_type(n.id) == vanektree::BED) {
+                //                vbuilder.add_bridge(*from, n);
+                builder.add_diffbridge(from->pos.cast<double>(), n.pos.cast<double>(), from->Rmin, n.Rmin);
+                builder.add_junction(n.pos.cast<double>(), n.Rmin);
+                from = &n;
+                //            }
+            }
+        }
+
+
+//        BranchingTreeBuilder vbuilder{builder, sm, nodes};
+//        branchingtree::build_tree(nodes, vbuilder);
+
+//        std::cout << "unrouted ground points: " << vbuilder.unroutable_pinheads().size() << std::endl;
+//                for (size_t id : vbuilder.unroutable_pinheads())
+//                    builder.head(mesh_heads[id]).invalidate();
+    }
 
 }
 

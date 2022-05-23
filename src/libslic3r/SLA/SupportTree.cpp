@@ -36,7 +36,7 @@ indexed_triangle_set create_support_tree(const SupportableMesh &sm,
             break;
         }
         case SupportTreeType::Branching: {
-            create_branching_tree(*builder, sm);
+            create_hybrid_tree(*builder, sm);
             break;
         }
         default:;

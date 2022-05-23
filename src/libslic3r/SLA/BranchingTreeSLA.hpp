@@ -10,6 +10,8 @@ namespace Slic3r { namespace sla {
 
 void create_branching_tree(SupportTreeBuilder& builder, const SupportableMesh &sm);
 
+void create_hybrid_tree(SupportTreeBuilder& builder, const SupportableMesh &sm);
+
 }} // namespace Slic3r::sla
 
 #endif // BRANCHINGTREESLA_HPP
